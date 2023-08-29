@@ -28,7 +28,7 @@ if (length(remove.chordata)==0){
 }
 
 # Use locations in the working directory for scripts and taxonomy array
-scripts.folder <- file.path(workflow.outdir, "scripts")
+scripts.folder <- snakemake@params[['scriptdir']]
 tax.array.file <- file.path(workflow.outdir, "taxonomy_array.tsv")
 
 # Downstream processing for filtering OTUs

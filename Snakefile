@@ -16,9 +16,10 @@ include: "scripts/setup.smk"
 
 rule all:
     input:
-        expand(join(outdir, "classification/{samp}.krak.report"), samp=sample_names),
+        expand(join(outdir, "classification/{samp}.krak.report"), samp=get_samples()["sample_names"]),
         join(outdir, 'processed_results_kraken/plots/classified_taxonomy_barplot_species.pdf'),
-        run_extra_all_outputs,
+        get_run_extra_all_outputs(),
+        expand(join(outdir, "krona/{samp}.html"), samp=get_samples()["sample_names"]),
         join(outdir, "kraken2_processing_completed.txt")
 
 rule create_taxonomy_array:
@@ -53,21 +54,23 @@ rule copy_files_processing:
 # Run classification with Kraken2
 rule kraken:
     input:
-        reads = lambda wildcards: sample_reads[wildcards.samp],
+        reads = lambda wildcards: get_samples()["sample_reads"][wildcards.samp],
     output:
         krak = join(outdir, "classification/{samp}.krak"),
         krak_report = join(outdir, "classification/{samp}.krak.report")
     params:
         db = config['database'],
-        paired_string = paired_string,
+        paired_string = get_paired_string(),
         confidence_threshold = confidence_threshold
-    threads: kraken_threads
+    threads: 16
     resources:
-        mem=kraken_memory,
-        time=6
+        mem_mb=256000,
+        # time=6
     singularity: "docker://quay.io/biocontainers/kraken2:2.1.2--pl5262h7d875b9_0"
     shell: """
-        time kraken2 --db {params.db} --threads {threads} --output {output.krak} \
+        s5cmd cp 's3://latch-public/test-data/4034/kraken_test/db/*' {params.db} &&\
+
+        time kraken2 --db {params.db} --threads 16 --output {output.krak} \
         --report {output.krak_report} {params.paired_string} {input.reads} \
         --confidence {params.confidence_threshold} --use-names
         """
@@ -91,6 +94,8 @@ rule bracken:
         time = 1
     singularity: "docker://quay.io/biocontainers/bracken:2.8--py310h0dbaff4_1"
     shell: """
+        s5cmd cp 's3://latch-public/test-data/4034/kraken_test/db/*' {params.db} &&\
+
         bracken -d {params.db} -i {input.krak_report} -o {params.outspec} -r {params.readlen} \
         -l {params.level} -t {params.threshold}
         """
@@ -99,9 +104,12 @@ rule bracken:
 ## Run for Kraken, and also Bracken if the tool was run
 rule downstream_processing_kraken:
     input:
-        downstream_processing_input_kraken,
+        downstream_processing_input_kraken = expand(join(outdir, "classification/{samp}.krak.report"), samp=get_samples()["sample_names"]),
         tax_array = join(outdir, 'taxonomy_array.tsv'),
-        script_test = join(outdir, 'scripts/post_classification_workflow.R')
+        script_test = join(outdir, 'scripts/post_classification_workflow.R'),
+        sample_reads_file = get_sample_reads_file(),
+        # sample_reports_file = get_sample_reports_file(),
+        sample_groups_file = get_sample_groups_file()
     params:
         sample_reads_file = config["sample_reads_file"],
         sample_reports_file = config["sample_reports_file"],
@@ -109,7 +117,8 @@ rule downstream_processing_kraken:
         workflow_outdir = outdir,
         result_dir = join(outdir, 'processed_results_kraken'),
         use_bracken_report = False,
-        remove_chordata = config['remove_chordata']
+        remove_chordata = config['remove_chordata'],
+        scriptdir = join(workflow.basedir, 'scripts')
     singularity: "shub://bhattlab/kraken2_classification:kraken2_processing"
     output:
         join(outdir, 'processed_results_kraken/plots/classified_taxonomy_barplot_species.pdf')
@@ -118,9 +127,12 @@ rule downstream_processing_kraken:
 
 rule downstream_processing_bracken:
     input:
-        downstream_processing_input_bracken,
+        downstream_processing_input_bracken = get_downstream_processing_input_bracken(),
         tax_array = join(outdir, 'taxonomy_array.tsv'),
-        script_test = join(outdir, 'scripts/post_classification_workflow.R')
+        script_test = join(outdir, 'scripts/post_classification_workflow.R'),
+        sample_reads_file = get_sample_reads_file(),
+        # sample_reports_file = get_sample_reports_file(),
+        sample_groups_file = get_sample_groups_file()
     params:
         sample_reads_file = config["sample_reads_file"],
         sample_reports_file = config["sample_reports_file"],
@@ -128,7 +140,8 @@ rule downstream_processing_bracken:
         workflow_outdir = outdir,
         result_dir = join(outdir, 'processed_results_bracken'),
         use_bracken_report = config['run_bracken'],
-        remove_chordata = config['remove_chordata']
+        remove_chordata = config['remove_chordata'],
+        scriptdir = join(workflow.basedir, 'scripts')
     singularity: "shub://bhattlab/kraken2_classification:kraken2_processing"
     output:
         join(outdir, 'processed_results_bracken/plots/classified_taxonomy_barplot_species.pdf')
@@ -139,7 +152,7 @@ rule downstream_processing_bracken:
 rule remove_files_processing:
     input: 
         rules.downstream_processing_kraken.output,
-        run_extra_all_outputs
+        get_run_extra_all_outputs()
     output:
         join(outdir, "kraken2_processing_completed.txt")
     params:
@@ -155,7 +168,7 @@ rule krona:
     output: join(outdir, "krona/{samp}.html")
     shell: """
         ktImportTaxonomy -m 3 -s 0 -q 0 -t 5 -i {input} -o {output} \
-        -tax $(which kraken2 | sed 's/envs\/classification2.*$//g')/envs/classification2/bin/taxonomy
+        -tax /tmp/docker-build/work/KronaTools/taxonomy
         """
 
 # Optional rule to extract unmapped reads from the Kraken2 output
@@ -163,8 +176,8 @@ rule krona:
 rule extract_unmapped_paired:
     input:
         krak = join(outdir, "classification/{samp}.krak"),
-        r1 = lambda wildcards: sample_reads[wildcards.samp][0],
-        r2 = lambda wildcards: sample_reads[wildcards.samp][1],
+        r1 = lambda wildcards: get_samples()["sample_reads"][wildcards.samp][0],
+        r2 = lambda wildcards: get_samples()["sample_reads"][wildcards.samp][1],
     output:
         r1 = join(outdir, "unmapped_reads/{samp}_unmapped_1.fq"),
         r2 = join(outdir, "unmapped_reads/{samp}_unmapped_2.fq")
@@ -183,7 +196,7 @@ rule extract_unmapped_paired:
 rule extract_unmapped_single:
     input:
         krak = join(outdir, "classification/{samp}.krak"),
-        r1 = lambda wildcards: sample_reads[wildcards.samp],
+        r1 = lambda wildcards: get_samples()["sample_reads"][wildcards.samp],
     output:
         r1 = join(outdir, "unmapped_reads/{samp}_unmapped.fq"),
     params:
