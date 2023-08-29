@@ -1,5 +1,7 @@
 .snakemake/
+.latch/
 large_data/
 Rplots.pdf
 tests/db
 tests/test_output/scripts
+__pycache__
