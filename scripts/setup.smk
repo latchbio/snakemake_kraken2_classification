@@ -67,8 +67,6 @@ def get_downstream_processing_input_bracken():
 
     ## Add bracken outputs
     if config['run_bracken']:
-        # extra_run_list.append('bracken')
-        # extra_run_list.append('bracken_processed')
         downstream_processing_input_bracken = expand(join(outdir, "classification/{samp}.krak_bracken_species.report"), samp=get_sample_names())
     
     return downstream_processing_input_bracken

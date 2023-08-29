@@ -21,7 +21,6 @@ arg DEBIAN_FRONTEND=noninteractive
 
 # Latch SDK
 # DO NOT REMOVE
-run pip install latch==2.32.5
 run mkdir /opt/latch
 
 # Install Mambaforge
@@ -49,13 +48,9 @@ env PATH=/opt/conda/envs/workflow/bin:$PATH
 run apt-get update && apt-get install -y libcurl3-dev gcc zlib1g-dev
 run Rscript -e 'install.packages("pak", repos = sprintf("https://r-lib.github.io/p/pak/stable/%s/%s/%s", .Platform$pkgType, R.Version()$os, R.Version()$arch))'
 run Rscript -e 'pak::pak(c("RCurl", "matrixStats", "BiocManager", "grimbough/Rhdf5lib", "rhdf5", "SummarizedExperiment", "flowCore", "GenomicRanges", "BiocParallel", "ALDEx2", "stringi"))'
-# run Rscript -e 'BiocManager::install("prada")'
 run Rscript -e 'devtools::install_github("cmap/cmapR", dependencies = F)'
 
 # Install kronatools
-# https://github.com/marbl/Krona/releases/download/v2.8.1/KronaTools-2.8.1.tar
-# https://github.com/marbl/Krona/archive/refs/tags/v2.8.1.tar.gz
-
 run wget https://github.com/marbl/Krona/releases/download/v2.8.1/KronaTools-2.8.1.tar &&\
     tar -xvf KronaTools-2.8.1.tar --no-same-owner &&\
     rm KronaTools-2.8.1.tar &&\ 
@@ -66,13 +61,10 @@ run wget https://github.com/marbl/Krona/releases/download/v2.8.1/KronaTools-2.8.
     tar -zxf taxdump.tar.gz --directory taxonomy &&\
     ./updateTaxonomy.sh --only-build 
 
-# run apt-get update --yes && apt-get install --yes git
-# run pip install 'git+https://github.com/latchbio/latch.git'
-# run pip uninstall --yes latch
-# run echo 106 && pip install 'git+https://github.com/latchbio/latch.git'
 # Copy workflow data (use .dockerignore to skip files)
 copy . /root/
 
+run pip install latch==2.32.5
 
 # Latch snakemake workflow entrypoint
 # DO NOT CHANGE
